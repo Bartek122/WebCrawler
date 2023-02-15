@@ -18,37 +18,26 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class Main {
     private static final String URL = "https://www.infoworld.com";
+    private static final String CATEGORY = "/category/java/";
     private static final String FILE_EXTENSION = ".txt";
     private static final String PATH = "Files";
     public static void main(String[] args) {
 
-        final Slugify slugify = Slugify.builder().build();
-        Element elm = null;
+
+        Element elm ;
         try {
-            elm = Jsoup.connect(URL.concat("/category/java/")).get();
+            elm = Jsoup.connect(URL.concat(CATEGORY)).get();
+            deleteFolderIfExist();
+            Map<String, String> mapArticles = prepareMapWithArticles(elm);
+            ExecutorService executorService = Executors.newFixedThreadPool(10);
+            mapArticles.forEach((url,filename) -> executorService.execute(() -> dataFromArticle(url, filename)));
+            executorService.shutdown();
+
         } catch (IOException e) {
             e.printStackTrace();
         }
-        List<String> list;
-        list = elm.select("h3").stream()
-                .map(obj -> Objects.toString(obj, null))
-                .collect(Collectors.toList());
 
-        list = list.stream()
-                .map(s -> s.replace("<h3><a href=\"", ""))
-                .map(s -> s.replace("</a></h3>", ""))
-                .collect(Collectors.toList());
-        Map<String, String> mapStr = new HashMap<>();
-        for (String s : list) {
-            String uuid = UUID.randomUUID().toString();
-            int i = s.lastIndexOf("\">");
-            String result = slugify.slugify(uuid + s.substring(i + 2));
-            mapStr.put(s.substring(0, i), result);
-        }
-        deleteFolderIfExist();
-        ExecutorService executorService = Executors.newFixedThreadPool(10);
-        mapStr.forEach((url,filename) -> executorService.execute(() -> dataFromArticle(url, filename)));
-        executorService.shutdown();
+
     }
 
     private static void dataFromArticle(String url, String filename) {
@@ -72,13 +61,35 @@ public class Main {
             }
         }
     }
-    private static File saveContents(String fileName, String contents) throws IOException {
+    private static void saveContents(String fileName, String contents) throws IOException {
         File createFolder = new File(PATH);
         File createFile = new File(PATH, fileName);
         if (!createFolder.exists()) {
             FileUtils.createParentDirectories(createFolder);
         }
         FileUtils.writeStringToFile(createFile, contents, UTF_8);
-        return createFile;
+
     }
+    private static Map prepareMapWithArticles(Element elm) {
+        List<String> list;
+        list = elm.select("h3").stream()
+                .map(obj -> Objects.toString(obj, null))
+                .collect(Collectors.toList());
+
+        list = list.stream()
+                .map(s -> s.replace("<h3><a href=\"", ""))
+                .map(s -> s.replace("</a></h3>", ""))
+                .collect(Collectors.toList());
+        final Slugify slugify = Slugify.builder().build();
+        Map<String, String> mapStr = new HashMap<>();
+        for (String s : list) {
+            String uuid = UUID.randomUUID().toString();
+            int i = s.lastIndexOf("\">");
+            String result = slugify.slugify(uuid + s.substring(i + 2));
+            mapStr.put(s.substring(0, i), result);
+        }
+        return mapStr;
+    }
+
+
 }
